@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Nexora Motors | VR Showroom (Light Theme)</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+
+  <script>
+    // 1. CAR SELECTION SYSTEM
+    AFRAME.registerComponent('select-car', {
+      schema: {
+        message: { type: 'string' },
+        price: { type: 'string' },
+        model: { type: 'selector' }
+      },
+      init: function () {
+        this.el.addEventListener('click', () => {
+          // Update Text
+          document.querySelector('#infoText').setAttribute('value', this.data.message);
+          document.querySelector('#priceText').setAttribute('value', this.data.price);
+
+          // Hide all cars first
+          document.querySelectorAll('.car-model').forEach(m => m.setAttribute('visible', false));
+          
+          // Show the selected car
+          if (this.data.model) {
+            this.data.model.setAttribute('visible', true);
+          }
+        });
+      }
+    });
+
+    // 2. AI COLOR CUSTOMIZER (SMART FILTER FOR GLASS/TIRES)
+    AFRAME.registerComponent('customize-color', {
+      schema: { 
+        color: { type: 'color' },
+        colorName: { type: 'string' }
+      },
+      init: function () {
+        this.el.addEventListener('click', () => {
+          const cars = document.querySelectorAll('.car-model');
+          let visibleCar = null;
+          cars.forEach(car => {
+            if (car.getAttribute('visible') === true) {
+              visibleCar = car;
+            }
+          });
+
+          if (visibleCar) {
+            const mesh = visibleCar.getObject3D('mesh');
+            if (mesh) {
+              mesh.traverse((node) => {
+                if (node.isMesh && node.material) {
+                  let materials = Array.isArray(node.material) ? node.material : [node.material];
+                  
+                  materials.forEach(mat => {
+                    const matName = mat.name ? mat.name.toLowerCase() : '';
+                    const nodeName = node.name ? node.name.toLowerCase() : '';
+                    
+                    let isTransparent = mat.transparent === true || mat.opacity < 1;
+                    const excludedWords = ['glass', 'window', 'windshield', 'tire', 'wheel', 'rubber', 'light', 'lamp', 'interior', 'grill', 'trim', 'black'];
+                    
+                    let isExcludedPart = false;
+                    for (let i = 0; i < excludedWords.length; i++) {
+                      if (matName.includes(excludedWords[i]) || nodeName.includes(excludedWords[i])) {
+                        isExcludedPart = true;
+                        break;
+                      }
+                    }
+                    
+                    if (!isTransparent && !isExcludedPart && mat.color) {
+                      mat.color.set(new THREE.Color(this.data.color));
+                      mat.needsUpdate = true;
+                    }
+                  });
+                }
+              });
+            }
+            document.querySelector('#aiStatusText').setAttribute('value', 'AI Applied: ' + this.data.colorName);
+          }
+        });
+      }
+    });
+
+    // 3. THUMBSTICK ROTATION
+    AFRAME.registerComponent('thumbstick-turn', {
+      schema: { speed: { type: 'number', default: 2 } },
+      init: function () {
+        this.el.addEventListener('thumbstickmoved', (evt) => {
+          const x = evt.detail.x;
+          if (Math.abs(x) > 0.2) {
+            const rig = document.querySelector('#rig');
+            if (!rig) return;
+            const rotation = rig.getAttribute('rotation');
+            rotation.y -= x * this.data.speed;
+            rig.setAttribute('rotation', rotation);
+          }
+        });
+      }
+    });
+
+    // 4. MODEL CLEANER
+    AFRAME.registerComponent('clean-model', {
+      init: function () {
+        this.el.addEventListener('model-loaded', () => {
+          const mesh = this.el.getObject3D('mesh');
+          if (mesh) {
+            mesh.traverse((node) => {
+              if (node.isMesh) {
+                const nodeName = node.name ? node.name.toLowerCase() : '';
+                const matName = node.material && node.material.name ? node.material.name.toLowerCase() : '';
+                
+                const badWords = ['backdrop', 'background', 'wall', 'plane0']; // Removed 'gourami' just in case it hides the car body
+                badWords.forEach(word => {
+                  if (nodeName.includes(word) || matName.includes(word)) {
+                    node.visible = false; 
+                  }
+                });
+              }
+            });
+          }
+        });
+      }
+    });
+  </script>
+</head>
+
+<body>
+<!-- Added specific raycaster objects to ensure mouse clicks always register on buttons -->
+<a-scene raycaster="objects: .clickable" cursor="rayOrigin: mouse">
+
+  <!-- BACKGROUND -->
+  <a-sky color="#E8ECEF"></a-sky>
+
+  <!-- ASSETS -->
+  <a-assets>
+      <img id="x1-img" src="images/Nexora Motors X1 logo design.jpg" alt="Nexora X1">
+      <img id="v8r-img" src="images/V8R sports logo with fiery glow.jpg" alt="Nexora v8r">
+      <img id="evolve-img" src="images/Evolve luxury sedan logo design.jpg" alt="Nexora evolve">
+      
+      <img id="nexoralogo" src="images/Nexora Motors_ Drive the Future.jpg" alt="Company Logo">
+      
+      <!-- FIXED: Restored your original exact file names! -->
+      <a-asset-item id="x1Model" src="models/gourami_-_luxury_saloon.glb"></a-asset-item>
+      <a-asset-item id="v8rModel" src="models/bumblebee_prototype_chevrolet_car_3d_model.glb"></a-asset-item>
+      <a-asset-item id="evolveModel" src="models/2018_audi_rs_3_sportback.glb"></a-asset-item>
+  </a-assets>
+
+  <!-- CAMERA RIG -->
+  <a-entity id="rig" position="0 0 3" wasd-controls>
+    <a-entity camera look-controls position="0 1.6 0"></a-entity>
+    <a-entity laser-controls="hand: left" position="-0.3 1.4 -0.5" raycaster="objects: .clickable" thumbstick-turn></a-entity>
+    <a-entity laser-controls="hand: right" position="0.3 1.4 -0.5" raycaster="objects: .clickable" thumbstick-turn></a-entity>
+  </a-entity>
+
+  <!-- LIGHTING -->
+  <a-entity light="type: ambient; intensity: 0.8; color: #ffffff"></a-entity>
+  <a-entity light="type: directional; intensity: 0.7; color: #ffffff" position="0 5 5"></a-entity>
+
+  <!-- ENCLOSED ROOM -->
+  <a-plane position="0 -1 0" rotation="-90 0 0" width="14" height="14" color="#D3D9DF"></a-plane>
+  <a-plane position="0 5 0" rotation="90 0 0" width="14" height="14" color="#FFFFFF"></a-plane>
+  <a-plane position="0 2 -7" width="14" height="6" color="#FFFFFF"></a-plane>
+  <a-plane position="-7 2 0" rotation="0 90 0" width="14" height="6" color="#F4F7F6"></a-plane>
+  <a-plane position="7 2 0" rotation="0 -90 0" width="14" height="6" color="#F4F7F6"></a-plane>
+  <a-plane position="0 2 7" rotation="0 180 0" width="14" height="6" color="#F4F7F6"></a-plane>
+
+  <!-- UI TEXT -->
+  <a-text id="titleText" value="NEXORA MOTORS VR STUDIO" position="0 4.5 -6.9" align="center" width="12" color="#0047FF"></a-text>
+  <a-text id="infoText" value="Click a vehicle to explore" position="0 3.8 -6.9" align="center" width="8" color="#333333"></a-text>
+  <a-text id="priceText" value="" position="0 3.3 -6.9" align="center" width="8" color="#555555"></a-text>
+
+  <!-- 3D CAR MODELS -->
+  <a-entity id="x1-3D" class="car-model" gltf-model="#x1Model" position="0 -0.6 0" scale="1 1 1" visible="false" clean-model
+            animation="property: rotation; dur: 20000; loop: true; to: 0 360 0"></a-entity>
+
+  <a-entity id="v8r-3D" class="car-model" gltf-model="#v8rModel" position="0 -0.6 0" scale="1 1 1" visible="false" clean-model
+            animation="property: rotation; dur: 20000; loop: true; to: 0 360 0"></a-entity>
+
+  <a-entity id="evolve-3D" class="car-model" gltf-model="#evolveModel" position="0 -0.6 0" scale="1 1 1" visible="false" clean-model
+            animation="property: rotation; dur: 20000; loop: true; to: 0 360 0"></a-entity>
+
+  <!-- CLICKABLE BUTTONS -->
+  <a-plane class="clickable" src="#x1-img" color="#EEEEEE" position="-3 1.6 -6.95" width="1.8" height="1.8"
+           select-car="message: Nexora X1 - Smart SUV; price: INR 35,00,000; model: #x1-3D">
+           <a-text value="X1 SUV" position="0 -1.2 0" align="center" color="#111111"></a-text>
+  </a-plane>
+
+  <a-plane class="clickable" src="#v8r-img" color="#EEEEEE" position="0 1.6 -6.95" width="1.8" height="1.8"
+           select-car="message: Nexora V8R - Sports; price: INR 1,20,00,000; model: #v8r-3D">
+           <a-text value="V8R SPORTS" position="0 -1.2 0" align="center" color="#111111"></a-text>
+  </a-plane>
+
+  <a-plane class="clickable" src="#evolve-img" color="#EEEEEE" position="3 1.6 -6.95" width="1.8" height="1.8"
+           select-car="message: Nexora Evolve - Sedan; price: INR 45,00,000; model: #evolve-3D">
+           <a-text value="EVOLVE SEDAN" position="0 -1.2 0" align="center" color="#111111"></a-text>
+  </a-plane>
+
+  <!-- AI CUSTOMIZER -->
+  <a-text value="AI COLOR CUSTOMIZER" position="6.8 3.5 0" rotation="0 -90 0" align="center" width="8" color="#0047FF"></a-text>
+  <a-text id="aiStatusText" value="Select a color" position="6.8 2.8 0" rotation="0 -90 0" align="center" width="6" color="#333333"></a-text>
+
+  <a-plane class="clickable" color="#C0C0C0" position="6.8 1.8 -2" rotation="0 -90 0" width="1.2" height="1.2"
+           customize-color="color: #C0C0C0; colorName: Liquid Silver"></a-plane>
+
+  <a-plane class="clickable" color="#0047FF" position="6.8 1.8 0" rotation="0 -90 0" width="1.2" height="1.2"
+           customize-color="color: #0047FF; colorName: Electric Cobalt"></a-plane>
+
+  <a-plane class="clickable" color="#0B0C10" position="6.8 1.8 2" rotation="0 -90 0" width="1.2" height="1.2"
+           customize-color="color: #0B0C10; colorName: Obsidian Black"></a-plane>
+
+  <!-- LEFT WALL LOGO -->
+  <a-image 
+      src="#nexoralogo" 
+      rotation="0 90 0" 
+      position="-6.99 2 0" 
+      width="3" 
+      height="1.5">
+  </a-image>
+
+</a-scene>
+</body>
+</html>
